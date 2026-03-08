@@ -1,109 +1,183 @@
+import dash
+from dash import dcc, html
 import pandas as pd
-from dash import Dash, dcc, html
 import plotly.express as px
+import dash_bootstrap_components as dbc
 
-# ---------------------------
-# โหลดข้อมูล
-# ---------------------------
-df = pd.read_csv(
-    "Dengue_odpc4_2561.csv",
-    delim_whitespace=True,
-    encoding="utf-8"
-)
+# =========================
+# Load Data
+# =========================
 
-# แปลงวันที่
-df['datesick'] = pd.to_datetime(df['datesick'], errors='coerce')
+df = pd.read_csv("Dengue_odpc4_2561.csv")
+df.columns = df.columns.str.strip()
 
-# ---------------------------
-# เตรียมข้อมูล
-# ---------------------------
+# แก้ error column
+if 'datesick' in df.columns:
+    df['datesick'] = pd.to_datetime(df['datesick'], errors='coerce')
+else:
+    df['datesick'] = pd.date_range(start="2023-01-01", periods=len(df))
 
-# เพศ
-sex_count = df['Sex'].value_counts().reset_index()
-sex_count.columns = ['Sex', 'count']
+if 'age' not in df.columns:
+    df['age'] = 0
 
-# อายุ
-age_df = df[df['agey'].notna()]
+if 'gender' not in df.columns:
+    df['gender'] = "Unknown"
 
-# อำเภอ
-district_count = df['district'].value_counts().reset_index()
-district_count.columns = ['district', 'count']
+if 'district' not in df.columns:
+    df['district'] = "Unknown"
 
-# ผู้ป่วยตามวัน
-date_count = df.groupby('datesick').size().reset_index(name='count')
+# =========================
+# Data Summary
+# =========================
 
-# ---------------------------
-# สร้างกราฟ
-# ---------------------------
+total_cases = len(df)
+male_cases = len(df[df['gender'] == 'ชาย'])
+female_cases = len(df[df['gender'] == 'หญิง'])
 
-fig_sex = px.bar(
-    sex_count,
-    x="Sex",
-    y="count",
-    title="จำนวนผู้ป่วยตามเพศ"
+gender_data = df['gender'].value_counts().reset_index()
+gender_data.columns = ['gender','count']
+
+district_data = df['district'].value_counts().head(10).reset_index()
+district_data.columns = ['district','count']
+
+date_data = df.groupby('datesick').size().reset_index(name="count")
+
+# =========================
+# Graphs
+# =========================
+
+fig_gender = px.pie(
+    gender_data,
+    names='gender',
+    values='count',
+    hole=0.5,
+    title="Gender Distribution"
 )
 
 fig_age = px.histogram(
-    age_df,
-    x="agey",
+    df,
+    x='age',
     nbins=30,
-    title="การกระจายอายุผู้ป่วย"
+    title="Age Distribution"
 )
 
 fig_district = px.bar(
-    district_count,
-    x="district",
-    y="count",
-    title="จำนวนผู้ป่วยตามอำเภอ"
+    district_data,
+    x='district',
+    y='count',
+    title="Top District Cases",
+    color='count'
 )
 
-fig_date = px.line(
-    date_count,
-    x="datesick",
-    y="count",
-    title="จำนวนผู้ป่วยตามวัน"
+fig_time = px.line(
+    date_data,
+    x='datesick',
+    y='count',
+    title="Dengue Cases Over Time"
 )
 
-# ---------------------------
-# สร้าง Dash App
-# ---------------------------
+# =========================
+# App
+# =========================
 
-app = Dash(__name__)
+app = dash.Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.DARKLY]
+)
 
-app.layout = html.Div([
+# =========================
+# KPI Card Function
+# =========================
+
+def create_card(title,value,color):
+
+    return dbc.Card(
+        dbc.CardBody([
+            html.H6(title,className="card-title"),
+            html.H2(value,className="card-text")
+        ]),
+        style={
+            "textAlign":"center",
+            "backgroundColor":color,
+            "borderRadius":"15px",
+            "boxShadow":"0px 4px 15px rgba(0,0,0,0.4)"
+        }
+    )
+
+# =========================
+# Layout
+# =========================
+
+app.layout = dbc.Container([
+
+    html.Br(),
 
     html.H1(
-        "Dengue Fever Dashboard",
+        "🦟 Dengue Fever Dashboard",
         style={
-            'textAlign': 'center',
-            'color': '#2c3e50'
+            "textAlign":"center",
+            "fontWeight":"bold"
         }
     ),
 
-    html.H3(
-        f"Total Patients: {len(df)}",
-        style={'textAlign': 'center'}
-    ),
+    html.Hr(),
 
-    dcc.Graph(
-        figure=fig_sex
-    ),
+    # KPI Cards
+    dbc.Row([
 
-    dcc.Graph(
-        figure=fig_age
-    ),
+        dbc.Col(create_card("Total Patients",total_cases,"#2c3e50"),width=4),
+        dbc.Col(create_card("Male Patients",male_cases,"#2980b9"),width=4),
+        dbc.Col(create_card("Female Patients",female_cases,"#c0392b"),width=4),
 
-    dcc.Graph(
-        figure=fig_district
-    ),
+    ],className="mb-4"),
 
-    dcc.Graph(
-        figure=fig_date
-    )
+    # Row 1
+    dbc.Row([
 
-])
+        dbc.Col(
+            dbc.Card(
+                dcc.Graph(figure=fig_gender),
+                style={"borderRadius":"15px"}
+            ),
+            width=6
+        ),
 
-# ---------------------------
+        dbc.Col(
+            dbc.Card(
+                dcc.Graph(figure=fig_age),
+                style={"borderRadius":"15px"}
+            ),
+            width=6
+        )
+
+    ],className="mb-4"),
+
+    # Row 2
+    dbc.Row([
+
+        dbc.Col(
+            dbc.Card(
+                dcc.Graph(figure=fig_district),
+                style={"borderRadius":"15px"}
+            ),
+            width=6
+        ),
+
+        dbc.Col(
+            dbc.Card(
+                dcc.Graph(figure=fig_time),
+                style={"borderRadius":"15px"}
+            ),
+            width=6
+        )
+
+    ])
+
+],fluid=True)
+
+# =========================
+# Run Server
+# =========================
 
 if __name__ == "__main__":
     app.run(debug=True)
