@@ -14,7 +14,7 @@ df = pd.read_csv("Dengue_odpc4_2561.csv")
 df.columns = df.columns.str.strip()
 
 # =========================
-# Fix Missing Columns
+# Fix Column Problems
 # =========================
 
 if 'datesick' in df.columns:
@@ -40,10 +40,10 @@ male_cases = len(df[df['gender'] == 'ชาย'])
 female_cases = len(df[df['gender'] == 'หญิง'])
 
 gender_data = df['gender'].value_counts().reset_index()
-gender_data.columns = ['gender', 'count']
+gender_data.columns = ['gender','count']
 
 district_data = df['district'].value_counts().head(10).reset_index()
-district_data.columns = ['district', 'count']
+district_data.columns = ['district','count']
 
 date_data = df.groupby('datesick').size().reset_index(name='count')
 
@@ -61,9 +61,8 @@ def dengue_prediction(data):
     y = cases['count']
 
     model = LinearRegression()
-    model.fit(X, y)
+    model.fit(X,y)
 
-    # predict future
     future_days = 30
     last_date = cases['datesick'].max()
 
@@ -74,14 +73,14 @@ def dengue_prediction(data):
     prediction = model.predict(future_num)
 
     future_df = pd.DataFrame({
-        "datesick": future_dates,
-        "predicted_cases": prediction
+        "datesick":future_dates,
+        "predicted_cases":prediction
     })
 
-    return cases, future_df
+    return cases,future_df
 
 
-real_cases, predicted_cases = dengue_prediction(df)
+real_cases,predicted_cases = dengue_prediction(df)
 
 # =========================
 # Graphs
@@ -89,49 +88,60 @@ real_cases, predicted_cases = dengue_prediction(df)
 
 fig_gender = px.pie(
     gender_data,
-    names='gender',
-    values='count',
-    hole=0.5,
-    title="Gender Distribution"
+    names="gender",
+    values="count",
+    hole=0.6,
+    color_discrete_sequence=px.colors.sequential.Teal
 )
 
 fig_age = px.histogram(
     df,
-    x='age',
+    x="age",
     nbins=30,
-    title="Age Distribution"
+    color_discrete_sequence=["#5dade2"]
 )
 
 fig_district = px.bar(
     district_data,
-    x='district',
-    y='count',
-    color='count',
-    title="Top District Dengue Cases"
+    x="district",
+    y="count",
+    color="count",
+    color_continuous_scale="blues"
 )
 
 fig_time = px.line(
     date_data,
-    x='datesick',
-    y='count',
-    title="Dengue Cases Over Time"
+    x="datesick",
+    y="count"
 )
 
-# ML Prediction Graph
 fig_ml = px.line(
     real_cases,
     x="datesick",
-    y="count",
-    title="Dengue Cases Prediction (Machine Learning)"
+    y="count"
 )
 
 fig_ml.add_scatter(
     x=predicted_cases["datesick"],
     y=predicted_cases["predicted_cases"],
-    mode='lines',
+    mode="lines",
     name="Prediction",
-    line=dict(dash='dash')
+    line=dict(dash="dash")
 )
+
+# =========================
+# Dark Graph Style
+# =========================
+
+graphs = [fig_gender,fig_age,fig_district,fig_time,fig_ml]
+
+for g in graphs:
+    g.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#0f172a",
+        plot_bgcolor="#0f172a",
+        font=dict(color="white")
+    )
 
 # =========================
 # App
@@ -143,21 +153,38 @@ app = dash.Dash(
 )
 
 # =========================
-# Card Function
+# KPI Card
 # =========================
 
-def create_card(title,value,color):
+def create_card(title,value):
 
     return dbc.Card(
         dbc.CardBody([
-            html.H5(title),
-            html.H2(value)
+
+            html.P(
+                title,
+                style={
+                    "color":"#94a3b8",
+                    "fontSize":"14px",
+                    "marginBottom":"5px"
+                }
+            ),
+
+            html.H2(
+                value,
+                style={
+                    "fontWeight":"bold",
+                    "fontSize":"36px"
+                }
+            )
+
         ]),
         style={
-            "textAlign":"center",
-            "backgroundColor":color,
-            "borderRadius":"15px",
-            "boxShadow":"0px 5px 20px rgba(0,0,0,0.4)"
+            "background":"#1e293b",
+            "border":"1px solid #334155",
+            "borderRadius":"14px",
+            "padding":"10px",
+            "boxShadow":"0 4px 20px rgba(0,0,0,0.4)"
         }
     )
 
@@ -169,9 +196,17 @@ app.layout = dbc.Container([
 
     html.Br(),
 
-    html.H1(
-        "🦟 Dengue Fever Dashboard",
-        style={"textAlign":"center","fontWeight":"bold"}
+    html.H2(
+        "Dengue Analytics Dashboard",
+        style={
+            "fontWeight":"600",
+            "letterSpacing":"1px"
+        }
+    ),
+
+    html.P(
+        "Public Health Data Monitoring System",
+        style={"color":"#94a3b8"}
     ),
 
     html.Hr(),
@@ -179,47 +214,62 @@ app.layout = dbc.Container([
     # KPI
     dbc.Row([
 
-        dbc.Col(create_card("Total Patients",total_cases,"#2c3e50"),width=4),
-        dbc.Col(create_card("Male Patients",male_cases,"#2980b9"),width=4),
-        dbc.Col(create_card("Female Patients",female_cases,"#c0392b"),width=4),
+        dbc.Col(create_card("Total Patients",total_cases),width=4),
+        dbc.Col(create_card("Male Patients",male_cases),width=4),
+        dbc.Col(create_card("Female Patients",female_cases),width=4),
 
     ],className="mb-4"),
 
-    # Graph Row 1
+    # Row 1
     dbc.Row([
 
         dbc.Col(
-            dbc.Card(dcc.Graph(figure=fig_gender)),
+            dbc.Card(
+                dcc.Graph(figure=fig_gender),
+                style={"background":"#1e293b","borderRadius":"14px"}
+            ),
             width=6
         ),
 
         dbc.Col(
-            dbc.Card(dcc.Graph(figure=fig_age)),
+            dbc.Card(
+                dcc.Graph(figure=fig_age),
+                style={"background":"#1e293b","borderRadius":"14px"}
+            ),
             width=6
         )
 
     ],className="mb-4"),
 
-    # Graph Row 2
+    # Row 2
     dbc.Row([
 
         dbc.Col(
-            dbc.Card(dcc.Graph(figure=fig_district)),
+            dbc.Card(
+                dcc.Graph(figure=fig_district),
+                style={"background":"#1e293b","borderRadius":"14px"}
+            ),
             width=6
         ),
 
         dbc.Col(
-            dbc.Card(dcc.Graph(figure=fig_time)),
+            dbc.Card(
+                dcc.Graph(figure=fig_time),
+                style={"background":"#1e293b","borderRadius":"14px"}
+            ),
             width=6
         )
 
     ],className="mb-4"),
 
-    # ML Graph
+    # ML
     dbc.Row([
 
         dbc.Col(
-            dbc.Card(dcc.Graph(figure=fig_ml)),
+            dbc.Card(
+                dcc.Graph(figure=fig_ml),
+                style={"background":"#1e293b","borderRadius":"14px"}
+            ),
             width=12
         )
 
@@ -228,7 +278,7 @@ app.layout = dbc.Container([
 ],fluid=True)
 
 # =========================
-# Run Server
+# Run
 # =========================
 
 if __name__ == "__main__":
