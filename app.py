@@ -1,17 +1,22 @@
 import dash
 from dash import dcc, html
+import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
-import dash_bootstrap_components as dbc
+from sklearn.linear_model import LinearRegression
+import numpy as np
 
 # =========================
-# Load Data
+# Load Dataset
 # =========================
 
 df = pd.read_csv("Dengue_odpc4_2561.csv")
 df.columns = df.columns.str.strip()
 
-# แก้ error column
+# =========================
+# Fix Missing Columns
+# =========================
+
 if 'datesick' in df.columns:
     df['datesick'] = pd.to_datetime(df['datesick'], errors='coerce')
 else:
@@ -27,7 +32,7 @@ if 'district' not in df.columns:
     df['district'] = "Unknown"
 
 # =========================
-# Data Summary
+# Summary Data
 # =========================
 
 total_cases = len(df)
@@ -35,12 +40,48 @@ male_cases = len(df[df['gender'] == 'ชาย'])
 female_cases = len(df[df['gender'] == 'หญิง'])
 
 gender_data = df['gender'].value_counts().reset_index()
-gender_data.columns = ['gender','count']
+gender_data.columns = ['gender', 'count']
 
 district_data = df['district'].value_counts().head(10).reset_index()
-district_data.columns = ['district','count']
+district_data.columns = ['district', 'count']
 
-date_data = df.groupby('datesick').size().reset_index(name="count")
+date_data = df.groupby('datesick').size().reset_index(name='count')
+
+# =========================
+# Machine Learning
+# =========================
+
+def dengue_prediction(data):
+
+    cases = data.groupby('datesick').size().reset_index(name='count')
+
+    cases['date_num'] = cases['datesick'].map(pd.Timestamp.toordinal)
+
+    X = cases[['date_num']]
+    y = cases['count']
+
+    model = LinearRegression()
+    model.fit(X, y)
+
+    # predict future
+    future_days = 30
+    last_date = cases['datesick'].max()
+
+    future_dates = pd.date_range(last_date, periods=future_days)
+
+    future_num = future_dates.map(pd.Timestamp.toordinal).values.reshape(-1,1)
+
+    prediction = model.predict(future_num)
+
+    future_df = pd.DataFrame({
+        "datesick": future_dates,
+        "predicted_cases": prediction
+    })
+
+    return cases, future_df
+
+
+real_cases, predicted_cases = dengue_prediction(df)
 
 # =========================
 # Graphs
@@ -65,8 +106,8 @@ fig_district = px.bar(
     district_data,
     x='district',
     y='count',
-    title="Top District Cases",
-    color='count'
+    color='count',
+    title="Top District Dengue Cases"
 )
 
 fig_time = px.line(
@@ -74,6 +115,22 @@ fig_time = px.line(
     x='datesick',
     y='count',
     title="Dengue Cases Over Time"
+)
+
+# ML Prediction Graph
+fig_ml = px.line(
+    real_cases,
+    x="datesick",
+    y="count",
+    title="Dengue Cases Prediction (Machine Learning)"
+)
+
+fig_ml.add_scatter(
+    x=predicted_cases["datesick"],
+    y=predicted_cases["predicted_cases"],
+    mode='lines',
+    name="Prediction",
+    line=dict(dash='dash')
 )
 
 # =========================
@@ -86,21 +143,21 @@ app = dash.Dash(
 )
 
 # =========================
-# KPI Card Function
+# Card Function
 # =========================
 
 def create_card(title,value,color):
 
     return dbc.Card(
         dbc.CardBody([
-            html.H6(title,className="card-title"),
-            html.H2(value,className="card-text")
+            html.H5(title),
+            html.H2(value)
         ]),
         style={
             "textAlign":"center",
             "backgroundColor":color,
             "borderRadius":"15px",
-            "boxShadow":"0px 4px 15px rgba(0,0,0,0.4)"
+            "boxShadow":"0px 5px 20px rgba(0,0,0,0.4)"
         }
     )
 
@@ -114,15 +171,12 @@ app.layout = dbc.Container([
 
     html.H1(
         "🦟 Dengue Fever Dashboard",
-        style={
-            "textAlign":"center",
-            "fontWeight":"bold"
-        }
+        style={"textAlign":"center","fontWeight":"bold"}
     ),
 
     html.Hr(),
 
-    # KPI Cards
+    # KPI
     dbc.Row([
 
         dbc.Col(create_card("Total Patients",total_cases,"#2c3e50"),width=4),
@@ -131,44 +185,42 @@ app.layout = dbc.Container([
 
     ],className="mb-4"),
 
-    # Row 1
+    # Graph Row 1
     dbc.Row([
 
         dbc.Col(
-            dbc.Card(
-                dcc.Graph(figure=fig_gender),
-                style={"borderRadius":"15px"}
-            ),
+            dbc.Card(dcc.Graph(figure=fig_gender)),
             width=6
         ),
 
         dbc.Col(
-            dbc.Card(
-                dcc.Graph(figure=fig_age),
-                style={"borderRadius":"15px"}
-            ),
+            dbc.Card(dcc.Graph(figure=fig_age)),
             width=6
         )
 
     ],className="mb-4"),
 
-    # Row 2
+    # Graph Row 2
     dbc.Row([
 
         dbc.Col(
-            dbc.Card(
-                dcc.Graph(figure=fig_district),
-                style={"borderRadius":"15px"}
-            ),
+            dbc.Card(dcc.Graph(figure=fig_district)),
             width=6
         ),
 
         dbc.Col(
-            dbc.Card(
-                dcc.Graph(figure=fig_time),
-                style={"borderRadius":"15px"}
-            ),
+            dbc.Card(dcc.Graph(figure=fig_time)),
             width=6
+        )
+
+    ],className="mb-4"),
+
+    # ML Graph
+    dbc.Row([
+
+        dbc.Col(
+            dbc.Card(dcc.Graph(figure=fig_ml)),
+            width=12
         )
 
     ])
